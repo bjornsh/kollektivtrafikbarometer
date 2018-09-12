@@ -3,7 +3,7 @@ library(dplyr)
 library(readxl)
 
 ##Read files names
-filenames <- list.files(path="02_input_data/xlsx",pattern="*xlsx")
+filenames <- list.files(path="C:\xxxx\xxx",pattern="*xlsx") # set to folder where data is stored
 
 #### put all dfs into a single list
 setwd("C:\xxxx\xxx") # set to folder where data is stored
