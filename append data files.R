@@ -11,7 +11,7 @@ setwd("C:\xxxx\xxx") # set to folder where data is stored
 files <- list()
 for(i in filenames){
   files[[i]] <- read_xlsx(i, col_names = TRUE) } 
-
+ 
 # change col names to lower
 for(i in 1:length(files)){
   names(files[[i]]) <- tolower(names(files[[i]]))
