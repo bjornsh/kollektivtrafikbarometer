@@ -1,10 +1,8 @@
-
 ##### Append journeys into same columns
 
 library(dplyr,lib.loc="C:/R/Rpackages")
 
-
-dat=read.csv("02_input_data/kolbart_2017-nu.csv", header=T, sep = ";")
+dat=read.csv("XXXXX", header=T, sep = ";")
 
 # select all columns linked to first, second, third etc journey and paste into separate df
 resa1= dat %>% select(respondentid, responsedate, avstand_1, contains("r1"), traveldate, traveldate.weekday) %>% 
@@ -64,4 +62,3 @@ rvu2 = rvu1 %>% filter(rvu1$b3_lat!=rvu1$b9_lat) %>% as.data.frame() # remove ro
 nrow(rvu) # original data
 nrow(rvu1) # data containing coordinates
 nrow(rvu2) # data containing coordinates but not same start and stop coordinates
-
