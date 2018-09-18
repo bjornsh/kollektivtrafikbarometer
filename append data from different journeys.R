@@ -46,13 +46,6 @@ colnames(resa5) = paste(kolnamn)
 # append all dataframes into on df
 rvu= bind_rows(resa1,resa2, resa3, resa4, resa5)
 
-# nrow(rvu)
-# rvu %>% select(b2, b3_lat) %>% filter(is.na(b2) & is.na(b3_lat)) %>% nrow()
-# rvu %>% select(b2, b3_lat) %>% filter(!is.na(b2) & !is.na(b3_lat)) %>% nrow()
-# rvu %>% select(b2, b3_lat) %>% filter(!is.na(b2) & is.na(b3_lat)) %>% nrow()
-# rvu %>% select(b2, b3_lat) %>% filter(is.na(b2) & !is.na(b3_lat)) %>% nrow()
-# 
-
 # data cleaning 
 rvu1= rvu %>% filter(!is.na(b3_lat)) # remove rows without travel information
 
