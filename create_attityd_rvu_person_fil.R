@@ -6,7 +6,7 @@
 
 # Original monthly data files contains about 500 rows and 300 columns where the number
 # of columns can change on a monthly basis. Sporadic changes in column names, eg upper 
-# instead of lower case and "." instead of "_" are taken care off. 
+# instead of lower case and "." instead of "_" are taken care of. 
 
 # RVU data comes in a wide format where each variable of each journey gets a new 
 # column requiring conversion to long format.
