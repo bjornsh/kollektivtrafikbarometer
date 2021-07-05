@@ -144,25 +144,26 @@ ruta1000 = st_read(paste0(folder_shapefile, "/", file_name, ".shp"),
 # Respondent ID does not always indicate year-month
 # hence datum column needs to be used 
 
-pers = read.csv2(paste0(folder_output, "person.csv"))
+if (file.exists(paste0(folder_output, "person.csv"))){
+  pers = read.csv2(paste0(folder_output, "person.csv"))
+  
+  # vector with year-month combinations already present in db
+  exist = unique(pers$ar.manad)
+  
+  # create file names for already existing data
+  exist = paste0("kollbar_", exist, ".xlsx")
+  
+  ### Read names of all files in folder
+  filenames <- list.files(path = folder_input, pattern = "*xlsx")
+  
+  # exclude 2017 and 2018 files 
+  # these are not monthly files and hence do not match file name pattern
+  filenames = filenames[filenames != "kollbar_2017.xlsx" & 
+                          filenames != "kollbar_2018.xlsx"]
+} else {
+  filenames = list.files(path = folder_input, pattern = "*xlsx")
+}
 
-# vector with year-month combinations already present in db
-exist = unique(pers$ar.manad)
-
-# create file names for already existing data
-exist = paste0("kollbar_", exist, ".xlsx")
-
-### Read names of all files in folder
-filenames <- list.files(path = folder_input, pattern = "*xlsx")
-
-# exclude 2017 and 2018 files 
-# these are not monthly files and hence do not match file name pattern
-filenames = filenames[filenames != "kollbar_2017.xlsx" & 
-                        filenames != "kollbar_2018.xlsx"]
-
-
-# names of files for dates that are not already included
-filenames = filenames[filenames %notin% exist]
 
 
 ### read all files
@@ -171,7 +172,7 @@ setwd(folder_input)
 files <- list()
 
 for(i in filenames){
-  files[[i]] <-  readxl::read_excel(i)
+  files[[i]] <-  readxl::read_excel(i, col_types = "text")
   }
 
 
@@ -179,6 +180,7 @@ for(i in filenames){
 for(i in 1:length(files)){
   names(files[[i]]) <- tolower(names(files[[i]]))
 }
+
 
 
 ### replace Swedish characters and # from column names
@@ -215,7 +217,7 @@ lanets_kommuner = c("enköping", "heby", "håbo", "knivsta", "tierp", "uppsala",
 
 dat = dat %>% 
   mutate(ar = as.character(as.numeric(ar) + 2009), # bind_rows is class sensitive
-         manad.text = month.abb[manad],
+         manad.text = month.abb[as.numeric(manad)],
          manad = ifelse(nchar(manad) == 1, paste0("0", manad), manad),
          ar.manad = as.character(paste0(ar, manad)),  # bind_rows is class sensitive
          alder = as.character(as.numeric(h1) + 12), # bind_rows is class sensitive
@@ -226,6 +228,7 @@ dat = dat %>%
          traveldate = as.Date(responsedate,'%m/%d/%Y')-1,
          traveldate.weekday = weekdays(as.Date(responsedate,'%m/%d/%Y')-1)) %>% 
   filter(u_kommun %in% lanets_kommuner) # a couple of people from other kommuner slipped in
+
 
 # kolla antal intervjuar per månad
 table(dat$ar, dat$manad)
@@ -249,14 +252,20 @@ attityd = dat %>%
 
 
 # load existing data
-attityd_exist = read.csv2(paste0(folder_output, "attityd.csv"), 
-                          # bind_rows is class sensitive, avoid problems by turning everything to character
-                          colClasses = "character") 
+if (file.exists(paste0(folder_output, "attityd.csv"))){
+  attityd_exist = read.csv2(paste0(folder_output, "attityd.csv"), 
+                            # bind_rows is class sensitive, avoid problems by turning everything to character
+                            colClasses = "character") 
+  attityd_final = attityd_exist %>%
+    bind_rows(., attityd)
+} else {
+  attityd_final = attityd
+}
 
-# append existing with new data
-attityd_final = attityd_exist %>% 
-  bind_rows(., attityd)
-  
+
+
+
+
 
 
 
@@ -324,20 +333,20 @@ pers = pers %>%
   mutate(across(everything(), as.character))
 
 
-##########################################################
-##### run only if database already exists #######
 
-# load existing data
-pers_exist = read.csv2(paste0(folder_output, "person.csv"), 
-                       # bind_rows is class sensitive, avoid problems by turning everything to character
-                       colClasses = "character") 
+# load existing data if it exists
+if (file.exists(paste0(folder_output, "person.csv"))){
+  pers_exist = read.csv2(paste0(folder_output, "person.csv"), 
+                            # bind_rows is class sensitive, avoid problems by turning everything to character
+                            colClasses = "character") 
+  # append new to existing data
+  pers_final = pers_exist %>% 
+    bind_rows(., pers)
+} else {
+  pers_final = pers
+}
 
 
-# append new to existing data
-pers_final = pers_exist %>% 
-  bind_rows(., pers)
-
-##########################################################
 
 
 
@@ -347,6 +356,10 @@ pers_final = pers_exist %>%
 ##################################################################################
 
 ### turn RVU data from wide to long
+### data structure for journey 1 differs from journey 2,3,4,5, 
+### ie lat columns comes before long, all other columns the other way around
+### as other inconsistencies may exist, colname needs to be created from each input df 
+
 meta = dat %>% dplyr::select(respondentid,  
                              contains("u_"), 
                              contains("Bostad"),
@@ -354,17 +367,17 @@ meta = dat %>% dplyr::select(respondentid,
                              ar, ar.manad, manad.text, kon, alder,weight)
 
 
-resa1= dat %>% 
+resa1= dat %>% # lat kommer innan lng, alla andra resor kommer lat efter lng
   dplyr::select(respondentid, avstand_1, contains("r1")) %>% 
   dplyr::select(respondentid, avstand_1, matches("lat|lng|b2|b5|b6|b7|b8|b11")) %>%
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa1")
 
-
-kolnamn = names(resa1) %>% 
+kolnamn_resa1 = names(resa1) %>% 
   gsub("avstand_1", "avstand", .) %>% 
   str_remove(., "_r1") %>% 
   str_remove(., "r1")
+
 
 
 resa2= dat %>% 
@@ -373,11 +386,25 @@ resa2= dat %>%
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa2")
 
+kolnamn_resa2 = names(resa2) %>% 
+  gsub("avstand_2", "avstand", .) %>% 
+  str_remove(., "_r2") %>% 
+  str_remove(., "r2")
+
+
+
 resa3= dat %>% 
   dplyr::select(respondentid, avstand_3, contains("r3")) %>% 
   dplyr::select(respondentid, avstand_3, matches("lat|lng|b2|b5|b6|b7|b8|b11")) %>%
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa3")
+
+kolnamn_resa3 = names(resa3) %>% 
+  gsub("avstand_3", "avstand", .) %>% 
+  str_remove(., "_r3") %>% 
+  str_remove(., "r3")
+
+
 
 resa4= dat %>% 
   dplyr::select(respondentid, avstand_4, contains("r4")) %>% 
@@ -385,17 +412,31 @@ resa4= dat %>%
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa4")
 
+kolnamn_resa4 = names(resa4) %>% 
+  gsub("avstand_4", "avstand", .) %>% 
+  str_remove(., "_r4") %>% 
+  str_remove(., "r4")
+
+
+
 resa5 = dat %>% 
   dplyr::select(respondentid, avstand_5, contains("r5")) %>% 
   dplyr::select(respondentid, avstand_5, matches("lat|lng|b2|b5|b6|b7|b8|b11")) %>%
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa5")
 
-colnames(resa1) = paste(kolnamn)
-colnames(resa2) = paste(kolnamn)
-colnames(resa3) = paste(kolnamn)
-colnames(resa4) = paste(kolnamn)
-colnames(resa5) = paste(kolnamn)
+kolnamn_resa5 = names(resa5) %>% 
+  gsub("avstand_5", "avstand", .) %>% 
+  str_remove(., "_r5") %>% 
+  str_remove(., "r5")
+
+
+
+colnames(resa1) = paste(kolnamn_resa1)
+colnames(resa2) = paste(kolnamn_resa2)
+colnames(resa3) = paste(kolnamn_resa3)
+colnames(resa4) = paste(kolnamn_resa4)
+colnames(resa5) = paste(kolnamn_resa5)
 
 rvu = bind_rows(resa1, resa2, resa3, resa4, resa5)
 
@@ -570,20 +611,18 @@ rvu1 = filter(rvu, !is.na(b3_lat))
 
 
 
-##########################################################
-##### run only if database already exists #######
+# load existing data if it exists
+if (file.exists(paste0(folder_output, "rvu.csv"))){
+  rvu_exist = read.csv2(paste0(folder_output, "rvu.csv"), 
+                        # bind_rows is class sensitive, avoid problems by turning everything to character
+                        colClasses = "character")
+  # append new to existing data
+  rvu_final = rvu_exist %>% 
+    bind_rows(., rvu1)
+} else {
+  rvu_final = rvu1
+}
 
-### load existing data
-rvu_exist = read.csv2(paste0(folder_output, "rvu.csv"), 
-                       # bind_rows is class sensitive, avoid problems by turning everything to character
-                       colClasses = "character") 
-
-
-### append existing with new data
-rvu_final = rvu_exist %>% 
-  bind_rows(., rvu1)
-
-##########################################################
 
 
 
@@ -613,4 +652,7 @@ write.table(attityd_final,
 ##################################################################################
 
 setwd(project_wd)
+
+
+
 
