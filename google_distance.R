@@ -20,7 +20,9 @@ gc()
 
 ### load libraries etc
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, lubridate, writexl, gmapsdistance)
+pacman::p_load(tidyverse, lubridate, writexl, 
+               gmapsdistance, # Google API 
+               geosphere) # geospatial distance
 
 
 # avoid scientific notation
@@ -56,7 +58,7 @@ set.api.key(google_api_direction)
 datum = c("202105") # c("YYYYMM", "YYYYMM")
 
 # get date for next monday (departure date)
-next_monday = as.character(nextweekday(Sys.Date(), 2))
+next_monday = as.character(nextweekday(Sys.Date(), 2)+1)
 
 # define departure time
 dep_time = "07:30:00"
@@ -265,6 +267,28 @@ rvu_restider = bind_rows(bil_koll1, cykel1, walk1) %>%
   mutate(restidskvot_koll_bil = koll_tid / bil_tid,
          api_run_datum = Sys.Date(),
          api_rese_datum = paste(next_monday, dep_time))
+
+
+
+### add straight line distance between start and stop coordinates
+for(i in 1:nrow(rvu_restider)){
+  rvu_restider$distance_straight_line[i] = with(rvu_restider[i,], 
+                                     distm(c(as.numeric(str_split_fixed(start_koord_wgs84, ",", 2)[,2]),
+                                             as.numeric(str_split_fixed(start_koord_wgs84, ",", 2)[,1])),
+                                           c(as.numeric(str_split_fixed(stop_koord_wgs84, ",", 2)[,2]),
+                                             as.numeric(str_split_fixed(stop_koord_wgs84, ",", 2)[,1])),
+                                           fun = distHaversine))
+}
+
+
+### add single column for google distance  
+rvu_restider = rvu_restider %>% 
+  mutate(distance_google = ifelse(str_detect(fardmedel.kat, "Kollektiv*"), koll_distance,
+                                  ifelse(fardmedel.kat == "Bil", bil_distance,
+                                         ifelse(fardmedel.kat == "Cykel", cykel_distance,
+                                                ifelse(fardmedel.kat == "Gång", walk_distance, NA)))),
+         distance_straight_line = round(distance_straight_line, 0))
+
 
 
 write.csv2(rvu_restider, paste0(folder_output, "rvu_restider.csv"), row.names = FALSE)
