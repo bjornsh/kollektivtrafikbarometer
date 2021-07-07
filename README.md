@@ -1,6 +1,6 @@
 ---
 title: "Automatisering av datahantering för Kollektivtrafikbarometern"
-output: rmarkdown::github_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
