@@ -1,0 +1,95 @@
+Automatisering av datahantering för Kollektivtrafikbarometern
+================
+
+## Syfte
+
+Kollektivtrafikbarometern (Kollbar) är en branschgemensam kvalitets-,
+attityd- och resvaneundersökning som drivs och utvecklas av Svensk
+Kollektivtrafik
+(<https://www.svenskkollektivtrafik.se/verktyg-och-system/kollektivtrafikbarometern/>).
+Regionala kollektivtrafikmyndigheter som beställer data från Svensk
+Kollektivtrafik har tillgång till ett online BI-verktyg som kan användas
+för indikator rapportering och enklare analyser. För integration i ett
+eget BI-verktyg, datakvalitetsgranskning, mer avancerade analyser krävs
+dock hantering av rådata där flera hundra variabler ingår.
+
+Syftet med skripten är att skapa ett standardiserat och kvalitetssäkrat
+verktyg som:
+
+-   transformerar Kollbar data till ett mer användbart format,  
+-   skapar geometadata för geografibaserade analyser och rapportering,  
+-   hämtar restid och distans från Google Directions API, och
+-   möjliggör månadsvis uppdatering av “databasen” utan att radera data
+    från tidigare API körningar.
+
+## Skriptstruktur
+
+Skripten bygger på en vanlig datahanteringsprocess som börjar med
+nedladdning av rådata och slutar med subsetting och anonymisering av
+data och kan användas i sekvens.
+
+**Ladda ner data från FTP serven**  
+Data finns på en lösenordsskyddad FTP server som hanteras av data
+leverantören. Det krävs att man beställer tillgång till data via FTP
+servern innan skriptet kan användas.
+
+[R
+skript](https://github.com/bjornsh/kollektivtrafikbarometer/blob/master/ftp_download.R)
+
+**Skapa en användbar datastruktur**  
+Original rådata filen som levereras månadsvis innehåller några hundra
+rader där antal kolumner och deras position kan ändras beroende på
+utvecklingen av enkäten och tillägsfrågor. Det kan även förekomma
+slumpmässiga ändringar i variabelnamn som måste tas hand om.
+
+Skriptet läser in data och skapar tre separata filer som kan länkas via
+respondent ID. RVU data konverteras från wide till long, administrativa
+gränser för bostads- och resekoordinater läggs till, nya variabler
+skapas tex dygnstyp för när resor utfördes etc. Det är möjligt att köra
+skriptet på alla indata filer eller bara den senaste månadsleveransen
+för att minimera processing tid.
+
+[R
+skript](https://github.com/bjornsh/kollektivtrafikbarometer/blob/master/create_attityd_rvu_person_fil.R)
+
+**Beräkna resedistans och restid**  
+Färdmedelspecifika (bil, kollektivtrafik, cykel och gång)
+körvägsdistanser och restider beräknas med hjälp av Google Directions
+API för alla resor med start- och stopkoordinater. Standardisering av
+avgångstiden (nästa måndag kl 07:30) gör restider och restidskvoten
+jämförbar även om det kan vara missvisande för resor som tex utfördes
+under lågtrafiktid. För bäst resultat för kollektivtrafikresor bör
+skriptet köras inom samma tidtabellsperiod som data samlades in. Det
+krävs en Google API nyckel för att använda skriptet.
+
+[R
+skript](https://github.com/bjornsh/kollektivtrafikbarometer/blob/master/google_distance.R)
+
+**Skapa kommun subset och anonymisera data**  
+Kollbar data innehåller känsliga personuppgifter (GDPR!), tex
+bostadsuppgifter och information om funktionsnedsättning, som måste
+rensas bort innan data får delas utanför organisationen. Speciellt när
+man delar Kollbar data med andra finns det behov för att filtrera
+urvalet till svarspersoner som är folkbokförda i en viss kommun.
+
+[R
+skript](https://github.com/bjornsh/kollektivtrafikbarometer/blob/master/filter_anonymise.R)
+
+## Länkar till bakgrundsdokument
+
+För senaste dokumentversionen kontakta dataleverantören.
+
+[Kollbar
+enkät](https://github.com/bjornsh/kollektivtrafikbarometer/raw/master/docs/Enkat%20kollbar%202017.pdf)
+
+[Kollbar enkät med
+spårbarhet](https://github.com/bjornsh/kollektivtrafikbarometer/raw/master/docs/Kollbar%202020%20-%20Enk%C3%A4t%20med%20sp%C3%A5rbarhet.pdf)
+
+[Lookup
+tabell](https://github.com/bjornsh/kollektivtrafikbarometer/raw/master/docs/Variable%20information%20%2B%20Variable%20Values%202021-05-28.xlsx)
+
+[Viktning av
+data](https://github.com/bjornsh/kollektivtrafikbarometer/raw/master/docs/Viktning%20av%20data.pdf)
+
+[Dokumentation av beräkningar som används i Kollbar
+webbportalen](https://github.com/bjornsh/kollektivtrafikbarometer/raw/master/docs/Dokumentation%20av%20ber%C3%A4kningar.pdf)
