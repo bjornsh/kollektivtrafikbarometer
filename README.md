@@ -1,6 +1,6 @@
 ---
 title: "Automatisering av datahantering för Kollektivtrafikbarometern"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
