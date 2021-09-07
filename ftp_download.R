@@ -45,7 +45,7 @@ folder_input = paste0(getwd(), "/data/input/")
 ##################################################################################
 
 ### Define variables
-datum = "202102" # Download data for which month? (Format "YYYYMM")
+datum = "202107" # Download data for which month? (Format "YYYYMM")
 rkm = "UL" # Which RKM?
 protocol = "sftp"
 
