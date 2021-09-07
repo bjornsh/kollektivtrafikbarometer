@@ -11,8 +11,6 @@ library(knitr)
 
 ## Syfte  
 
-test
-
 Kollektivtrafikbarometern (Kollbar) är en branschgemensam kvalitets-, attityd- och resvaneundersökning som drivs och utvecklas av Svensk Kollektivtrafik (https://www.svenskkollektivtrafik.se/verktyg-och-system/kollektivtrafikbarometern/). Regionala kollektivtrafikmyndigheter som beställer data från Svensk Kollektivtrafik har tillgång till ett online BI-verktyg som kan användas för indikator rapportering och enklare analyser. För integration i ett eget BI-verktyg, datakvalitetsgranskning, mer avancerade analyser krävs dock hantering av rådata där flera hundra variabler ingår.
 
 Syftet med skripten är att skapa ett standardiserat och kvalitetssäkrat verktyg som: 

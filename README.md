@@ -3,8 +3,6 @@ Automatisering av datahantering för Kollektivtrafikbarometern
 
 ## Syfte
 
-test
-
 Kollektivtrafikbarometern (Kollbar) är en branschgemensam kvalitets-,
 attityd- och resvaneundersökning som drivs och utvecklas av Svensk
 Kollektivtrafik
