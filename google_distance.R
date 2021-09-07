@@ -43,8 +43,35 @@ nextweekday <- function(date, wday) {
 ### Read keys, define paths 
 api_fil = read_file("Z:/api")
 google_api_direction <- gsub('^.*google_direction: \\s*|\\s*\r.*$', "", api_fil)
+kollbar_data = gsub('^.*kollbar_data: \\s*|\\s*\r.*$', "", api_fil)
 
-folder_output = paste0(getwd(), "/data/output/")
+folder_input = paste0(kollbar_data, "input/")
+folder_output = paste0(kollbar_data, "output/")
+
+
+
+
+##################################################################################
+### Load and prepare Kollbar data
+##################################################################################
+
+restid = read.csv2(paste0(folder_output, "rvu_restider.csv"))
+pers = read.csv2(paste0(folder_output, "person.csv"))
+rvu = read.csv2(paste0(folder_output, "rvu.csv"))
+
+
+
+
+##################################################################################
+### Existing data
+##################################################################################
+
+respondentid_list = restid %>% select(respondentid) %>% unique() %>% pull()
+
+pers %>% 
+  filter(respondentid %in% respondentid_list) %>%
+  group_by(ar.manad) %>% 
+  summarise(n = n())
 
 
 
@@ -55,10 +82,10 @@ folder_output = paste0(getwd(), "/data/output/")
 set.api.key(google_api_direction)
 
 # List all months to be included
-datum = c("202105") # c("YYYYMM", "YYYYMM")
+datum = c("202108") # c("YYYYMM", "YYYYMM")
 
 # get date for next monday (departure date)
-next_monday = as.character(nextweekday(Sys.Date(), 2)+1)
+next_monday = as.character(nextweekday(Sys.Date(), 2))
 
 # define departure time
 dep_time = "07:30:00"
@@ -66,15 +93,10 @@ dep_time = "07:30:00"
 
 
 
+
 ##################################################################################
-### Load and prepare Kollbar data
+### Prepare data
 ##################################################################################
-
-
-rvu_restid_exist = read.csv2(paste0(folder_output, "rvu_restider.csv"))
-pers = read.csv2(paste0(folder_output, "person.csv"))
-rvu = read.csv2(paste0(folder_output, "rvu.csv"))
-
 
 # identify journeys from specified period
 include = pers %>% 
@@ -112,6 +134,10 @@ if (file.exists(paste0(folder_output, "rvu_restider.csv"))){
 
 ### prepare variable needed for API call
 rvu = rvu %>% 
+  mutate(b3_lat = gsub(",", ".", b3_lat), # replace decimal "," to "."
+         b3_lng = gsub(",", ".", b3_lng),
+         b9_lat = gsub(",", ".", b9_lat),
+         b9_lng = gsub(",", ".", b9_lng)) %>%
   mutate(start_koord_wgs84 = paste(b3_lat, b3_lng, sep = ","),
          stop_koord_wgs84 = paste(b9_lat, b9_lng, sep = ","))
 
@@ -126,6 +152,10 @@ google_df = rvu %>%
                 stop_koord_wgs84)
 
 
+rvu %>% select(b3_lat, b9_lat)  
+  
+  
+  
 bil_koll = filter(google_df, fardmedel.kat == "Bil" |
                          str_detect(fardmedel.kat, "Kollektiv*")) 
 
@@ -153,12 +183,12 @@ cykel = filter(google_df, fardmedel.kat == "Cykel")
 google_bil = list()
 
 for(i in 1:nrow(bil_koll)){
-google_bil[[i]] = gmapsdistance(bil_koll$start_koord_wgs84[i], 
+  google_bil[[i]] = gmapsdistance(bil_koll$start_koord_wgs84[i], 
                                 bil_koll$stop_koord_wgs84[i],
                                 dep_date = next_monday,
                                 dep_time = dep_time,
-                                combinations="pairwise",
-                                mode="driving",
+                                combinations = "pairwise",
+                                mode = "driving",
                                 shape = "long")
 }
 
@@ -170,8 +200,8 @@ for(i in 1:nrow(bil_koll)){
                                    bil_koll$stop_koord_wgs84[i],
                                    dep_date = next_monday,
                                    dep_time = dep_time,
-                                   combinations="pairwise",
-                                   mode="transit",
+                                   combinations = "pairwise",
+                                   mode = "transit",
                                    shape = "long")
 }
 
@@ -184,8 +214,8 @@ for(i in 1:nrow(cykel)){
                                    cykel$stop_koord_wgs84[i],
                                    dep_date = next_monday,
                                    dep_time = dep_time,
-                                   combinations="pairwise",
-                                   mode="bicycling",
+                                   combinations = "pairwise",
+                                   mode = "bicycling",
                                    shape = "long")
 }
 
@@ -198,8 +228,8 @@ for(i in 1:nrow(walk)){
                                     walk$stop_koord_wgs84[i],
                                     dep_date = next_monday,
                                     dep_time = dep_time,
-                                    combinations="pairwise",
-                                    mode="walking",
+                                    combinations = "pairwise",
+                                    mode = "walking",
                                     shape = "long")
 }
 
@@ -287,11 +317,26 @@ rvu_restider = rvu_restider %>%
                                   ifelse(fardmedel.kat == "Bil", bil_distance,
                                          ifelse(fardmedel.kat == "Cykel", cykel_distance,
                                                 ifelse(fardmedel.kat == "Gång", walk_distance, NA)))),
-         distance_straight_line = round(distance_straight_line, 0))
+         distance_straight_line = round(distance_straight_line, 0)) %>% 
+  mutate(across(everything(), as.character))
 
 
 
-write.csv2(rvu_restider, paste0(folder_output, "rvu_restider.csv"), row.names = FALSE)
+# load existing data if it exists
+if (file.exists(paste0(folder_output, "rvu_restider.csv"))){
+  rvu_restider_exist = read.csv2(paste0(folder_output, "rvu_restider.csv"), 
+                        # bind_rows is class sensitive, avoid problems by turning everything to character
+                        colClasses = "character")
+  # append new to existing data
+  rvu_restider_final = rvu_restider_exist %>% 
+    bind_rows(., rvu_restider)
+} else {
+  rvu_restider_final = rvu_restider
+}
+
+
+# save df
+write.csv2(rvu_restider_final, paste0(folder_output, "rvu_restider.csv"), row.names = FALSE)
 
 
 ##################################################################################
@@ -303,16 +348,16 @@ nrow(filter(rvu_restider, !is.na(restidskvot_koll_bil) & restidskvot_koll_bil <=
   nrow(filter(rvu_restider, !is.na(restidskvot_koll_bil) & restidskvot_koll_bil > 1.5))
 
 
-# Medel restidskvot där färdmedel = koll
+# Medel restidskvot för resor med färdmedel = koll
 rvu_restider %>% filter(!is.na(restidskvot_koll_bil) & 
          str_detect(fardmedel.kat, "Kollektiv*")) %>% 
-  summarise(medel = mean(restidskvot_koll_bil))
+  summarise(medel = mean(as.numeric(restidskvot_koll_bil)))
 
 
-# Medel restidskvot där färdmedel = bil
+# Medel restidskvot för resor med färdmedel = bil
 rvu_restider %>% filter(!is.na(restidskvot_koll_bil) & 
                  fardmedel.kat == "Bil") %>% 
-  summarise(medel = mean(restidskvot_koll_bil))
+  summarise(medel = mean(as.numeric(restidskvot_koll_bil)))
 
 
 

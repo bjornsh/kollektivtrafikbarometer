@@ -23,14 +23,15 @@ gc()
 library(dplyr)
 
 
-### Create directory 
-dir.create(file.path(paste0(getwd(), "/data/output/sample")))
 
+### Read keys, define paths 
+api_fil = read_file("Z:/api")
+kollbar_data = gsub('^.*kollbar_data: \\s*|\\s*\r.*$', "", api_fil)
 
+folder_input = paste0(kollbar_data, "input/")
+folder_output = paste0(kollbar_data, "output/")
 
-# define folder path
-path = paste0(getwd(), "/data/output/")
-path_sample = paste0(getwd(), "/data/output/sample/")
+dir.create(file.path(paste0(folder_output, "sample")))
 
 
 
@@ -43,7 +44,7 @@ path_sample = paste0(getwd(), "/data/output/sample/")
 # alla kommuner: kommun = c()
 
 kommun = c("håbo") # c("håbo", "enköping", "knivsta")
-
+tid = c("2021")
 
 
 
@@ -51,10 +52,10 @@ kommun = c("håbo") # c("håbo", "enköping", "knivsta")
 ### Read data
 ##################################################################################
 
-pers = read.csv2(paste0(path, "person.csv"))
-attityd = read.csv2(paste0(path, "attityd.csv"))
-rvu = read.csv2(paste0(path, "rvu.csv"))
-restid = read.csv2(paste0(path, "rvu_restider.csv"))
+pers = read.csv2(paste0(folder_output, "person.csv"))
+attityd = read.csv2(paste0(folder_output, "attityd.csv"))
+rvu = read.csv2(paste0(folder_output, "rvu.csv"))
+restid = read.csv2(paste0(folder_output, "rvu_restider.csv"))
 
 
 
@@ -64,10 +65,10 @@ restid = read.csv2(paste0(path, "rvu_restider.csv"))
 
 ### respondent data
 
-if (length(kommun) > 0) {
+if (length(kommun) > 0 & length(tid) > 0) {
   pers = pers %>% 
-    # remove rows where person is not folkbokförd in target kommun
-    filter(u_kommun %in% kommun) %>% 
+    # remove interviewees from outside target kommun and time period
+    filter(u_kommun %in% kommun & ar %in% tid) %>% 
     # remove GDPR sensitive data
     dplyr::select(-bostad_rutid_500, 
                   -bostad_rutid_1000, 
@@ -75,7 +76,8 @@ if (length(kommun) > 0) {
                   -b3_r1_lat,
                   -u_postnummer, 
                   -u_postort,
-                  -h6)
+                  -h6,
+                  -contains("hemadress"))
 } else {
   pers = pers %>% 
   # remove GDPR sensitive data
@@ -84,7 +86,8 @@ if (length(kommun) > 0) {
                 -contains("lng"),
                 -u_postnummer, 
                 -u_postort,
-                -h6)
+                -h6,
+                -contains("hemadress"))
 }
 
 
@@ -97,7 +100,8 @@ inklud = pers %>% dplyr::select(respondentid) %>% pull()
 attityd = attityd %>% 
   filter(respondentid %in% inklud) %>% 
   # remove variables containing open questions as these may contain personal data
-  dplyr::select(-contains("open"))
+  dplyr::select(-contains("open"), 
+                -contains("avstand"))
 
 
 
@@ -125,10 +129,10 @@ restid = restid %>%
 ### Save files
 ##################################################################################
 
-write.csv2(pers, paste0(path_sample, "person_sample_", Sys.Date(), ".csv"), row.names = FALSE)
-write.csv2(attityd, paste0(path_sample, "attityd_sample_", Sys.Date(), ".csv"), row.names = FALSE)
-write.csv2(rvu, paste0(path_sample, "rvu_sample_", Sys.Date(), ".csv"), row.names = FALSE)
-write.csv2(restid, paste0(path_sample, "rvu_restid_sample_", Sys.Date(), ".csv"), row.names = FALSE)
+write.csv2(pers, paste0(folder_output, "sample/person_", kommun, tid,  ".csv"), row.names = FALSE)
+write.csv2(attityd, paste0(folder_output, "sample/attityd_", kommun, tid,  ".csv"), row.names = FALSE)
+write.csv2(rvu, paste0(folder_output, "sample/rvu_", kommun, tid,  ".csv"), row.names = FALSE)
+write.csv2(restid, paste0(folder_output, "sample/restid_", kommun, tid,  ".csv"), row.names = FALSE)
 
 
 

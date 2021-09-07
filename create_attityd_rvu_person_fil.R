@@ -35,7 +35,7 @@ gc()
 ##################################################################################
 
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, sf)
+pacman::p_load(tidyverse, sf, mapview)
 
 
 
@@ -44,15 +44,27 @@ options(scipen=999)
 
 
 ##################################################################################
-### Create directories (if not already exist)
+### Define paths and create data directories (if not already exist)
 ##################################################################################
 
-dir.create(file.path(getwd(), "data"))
-dir.create(file.path(paste0(getwd(), "/data"), "shapefile"))
-dir.create(file.path(paste0(getwd(), "/data"), "input"))
-dir.create(file.path(paste0(getwd(), "/data"), "output"))
-
 project_wd = getwd()
+
+# Read keys 
+api_fil = read_file("Z:/api")
+kollbar_data = gsub('^.*kollbar_data: \\s*|\\s*\r.*$', "", api_fil)
+
+# create local directories
+dir.create(file.path(paste0(kollbar_data, "shapefile")))
+dir.create(file.path(paste0(kollbar_data, "output")))
+
+# define local paths
+folder_shapefile = paste0(kollbar_data, "shapefile/")
+folder_input = paste0(kollbar_data, "input/")
+folder_output = paste0(kollbar_data, "output/")
+
+# define path to Github folder containing geodata
+folder_github = "https://github.com/bjornsh/gis_data/raw/main/" 
+
 
 ##################################################################################
 ### Functions
@@ -61,7 +73,7 @@ project_wd = getwd()
 `%notin%` <- Negate(`%in%`)
 
 
-# download and unzip shapefiles from Github
+# download and unzip shapefiles from Github unless done previously
 get_shapefile <- function(path){
     file_name = str_extract(url_shp, "[^/]+(?=\\.zip$)")
     file_name_full = paste0(file_name, ".zip")
@@ -81,22 +93,7 @@ get_shapefile <- function(path){
   
 
 ##################################################################################
-### Read keys, define paths 
-##################################################################################
-
-api_fil <- read_file("Z:/api")
-
-folder_input = paste0(getwd(), "/data/input/")
-folder_output = paste0(getwd(), "/data/output/")
-folder_shapefile = paste0(getwd(), "/data/shapefile/")
-folder_github = "https://github.com/bjornsh/gis_data/raw/main/"
-
-
-
-
-
-##################################################################################
-### Ladda geodata
+### Download geodata from Github, save locally and load SF
 ##################################################################################
 
 ### kommun
@@ -120,14 +117,14 @@ deso = st_read(paste0(folder_shapefile, "/", file_name, ".shp"),
                  options = "ENCODING=WINDOWS-1252")
 
 
-### 500m ruta
+### SCB 500m ruta
 url_shp = paste0(folder_github, "scb/ruta/Rutor500_03_region.zip")
 get_shapefile(url_shp)
 ruta500 = st_read(paste0(folder_shapefile, "/", file_name, ".shp"),
                options = "ENCODING=WINDOWS-1252")%>%
-  st_set_crs(3006)
+  st_set_crs(3006) # set coordinate system as SWEREF 99TM
 
-### 1000m ruta
+### SCB 1000m ruta
 url_shp = paste0(folder_github, "scb/ruta/Rutor1000_03_region.zip")
 get_shapefile(url_shp)
 ruta1000 = st_read(paste0(folder_shapefile, "/", file_name, ".shp"),
@@ -136,7 +133,7 @@ ruta1000 = st_read(paste0(folder_shapefile, "/", file_name, ".shp"),
 
 
 ##################################################################################
-### Ladda kollbar
+### Load Kollbar data
 ##################################################################################
 
 ### Identifiera Kollbar filen som ska läggas till
@@ -156,19 +153,24 @@ if (file.exists(paste0(folder_output, "person.csv"))){
   ### Read names of all files in folder
   filenames <- list.files(path = folder_input, pattern = "*xlsx")
   
-  # exclude 2017 and 2018 files 
-  # these are not monthly files and hence do not match file name pattern
+  # exclude 2017 and 2018 files, these are not monthly files and hence do not match file name pattern
+  # exclude files that already exist in database 
   filenames = filenames[filenames != "kollbar_2017.xlsx" & 
-                          filenames != "kollbar_2018.xlsx"]
+                          filenames != "kollbar_2018.xlsx" &
+                          filenames %notin% exist]
 } else {
   filenames = list.files(path = folder_input, pattern = "*xlsx")
 }
 
+# check that selection is correct
+print(filenames)
 
 
-### read all files
+
+### load all input files
 setwd(folder_input)
 
+# load input files into list
 files <- list()
 
 for(i in filenames){
@@ -176,11 +178,11 @@ for(i in filenames){
   }
 
 
-### change col names to lower
+### modify input data
+# change col names to lower
 for(i in 1:length(files)){
   names(files[[i]]) <- tolower(names(files[[i]]))
 }
-
 
 
 ### replace Swedish characters and # from column names
@@ -206,6 +208,7 @@ dat = files %>%
 ### convert all string to lower case
 dat = mutate_all(dat, .funs=tolower)
 
+# view number of interviews per kommun
 table(dat$u_kommun)
 
 
@@ -213,8 +216,11 @@ table(dat$u_kommun)
 ### skapa variabler
 ##################################################################################
 
+# define kommuner within länet
 lanets_kommuner = c("enköping", "heby", "håbo", "knivsta", "tierp", "uppsala", "älvkarleby", "östhammar")
 
+
+# create variables and filter "lanets_kommuner"
 dat = dat %>% 
   mutate(ar = as.character(as.numeric(ar) + 2009), # bind_rows is class sensitive
          manad.text = month.abb[as.numeric(manad)],
@@ -227,10 +233,10 @@ dat = dat %>%
          responsedate.weekday = weekdays(as.Date(responsedate,'%m/%d/%Y')), #### travel day
          traveldate = as.Date(responsedate,'%m/%d/%Y')-1,
          traveldate.weekday = weekdays(as.Date(responsedate,'%m/%d/%Y')-1)) %>% 
-  filter(u_kommun %in% lanets_kommuner) # a couple of people from other kommuner slipped in
+  filter(u_kommun %in% lanets_kommuner) # remove data for interviewees folkbokförd outside länet
 
 
-# kolla antal intervjuar per månad
+# view number of interviews per month
 table(dat$ar, dat$manad)
 
 with(dat, table(ar, manad, u_kommun))
@@ -240,8 +246,10 @@ with(dat, table(ar, manad, u_kommun))
 ### skapa attityd filen
 ##################################################################################
 
+### select variables
 attityd = dat %>% 
   dplyr::select(respondentid,
+                starts_with("a"), # kännedom och resvanor
                 starts_with("c"), # förutsättningar
                 starts_with("d"), # ombord
                 starts_with("e"), # service och info
@@ -251,7 +259,7 @@ attityd = dat %>%
 
 
 
-# load existing data
+### load existing data and merge with new data
 if (file.exists(paste0(folder_output, "attityd.csv"))){
   attityd_exist = read.csv2(paste0(folder_output, "attityd.csv"), 
                             # bind_rows is class sensitive, avoid problems by turning everything to character
@@ -261,11 +269,6 @@ if (file.exists(paste0(folder_output, "attityd.csv"))){
 } else {
   attityd_final = attityd
 }
-
-
-
-
-
 
 
 
@@ -282,22 +285,44 @@ pers = dat %>%
                 b1, 
                 h1:h6, 
                 weight, 
-                b3_r1_lng, b3_r1_lat)
+                b3_r1_lng, b3_r1_lat,
+                contains("hemadress")) # extra beställning
 
 
-# create sf with start coordinates of first journey, ie assumed bostad
-pers_sf =  pers %>%
-  dplyr::select(respondentid, b3_r1_lng, b3_r1_lat) %>% 
-  filter(!is.na(b3_r1_lng), !is.na(b3_r1_lat)) %>% # remove rows with missing data
-  mutate_at(vars(b3_r1_lng, b3_r1_lat), as.numeric) %>%   # coordinates must be numeric
+table(!grepl("sakna",tolower(pers$lng_hemadress)))
+
+
+# Skapa SF objekt 
+pers_sf = pers %>%
+  # ta bostadskoordinater (extra beställning) om dem finns, annars ta startkoordinater av första resa
+  mutate(bostad_lng = ifelse(!is.na(lng_hemadress) & 
+                               lng_hemadress != "0" &
+                               !grepl("sakna",tolower(lng_hemadress))
+                             , lng_hemadress, b3_r1_lng),
+         bostad_lat = ifelse(!is.na(lat_hemadress) & 
+                               lat_hemadress != "0" &
+                               !grepl("sakna",tolower(lat_hemadress)), 
+                             lat_hemadress, b3_r1_lat)) %>% 
+  # select variables used in geodata manipulation
+  dplyr::select(respondentid, bostad_lng, bostad_lat) %>% 
+  filter(!is.na(bostad_lng), !is.na(bostad_lat)) %>% # remove rows with missing data
+  mutate(bostad_lng = gsub(",", ".", gsub("\\.", "", bostad_lng)), # replace decimal "," to "."
+         bostad_lat = gsub(",", ".", gsub("\\.", "", bostad_lat))) %>% 
+  mutate_at(vars(bostad_lng, bostad_lat), as.numeric) %>%   # coordinates must be numeric
+  # skapa SF object
   st_as_sf(
-    coords = c("b3_r1_lng", "b3_r1_lat"),
+    coords = c("bostad_lng", "bostad_lat"),
     agr = "constant",
     crs = 4326,        # assign WGS84 as CRS
     stringsAsFactors = FALSE,
     remove = TRUE
   ) %>% 
-  st_transform(3006) # convert to SWEREF99
+  st_transform(3006) # convert to SWEREF99 for intersect with shapefiles
+
+
+# View bostadskoordinater
+mapview(pers_sf)
+
 
 
 # intersect coordinates with admin boundaries
@@ -362,7 +387,6 @@ if (file.exists(paste0(folder_output, "person.csv"))){
 
 meta = dat %>% dplyr::select(respondentid,  
                              contains("u_"), 
-                             contains("Bostad"),
                              traveldate, traveldate.weekday,
                              ar, ar.manad, manad.text, kon, alder,weight)
 
@@ -450,7 +474,9 @@ start_koordinat = rvu %>%
   rename(lng = b3_lng,
          lat = b3_lat)
 
-start_koordinat_sf =  start_koordinat %>% 
+start_koordinat_sf =  start_koordinat %>%
+  mutate(lng = gsub(",", ".", gsub("\\.", "", lng)), # replace decimal "," to "."
+         lat = gsub(",", ".", gsub("\\.", "", lat))) %>% 
   mutate_at(vars(lng, lat), as.numeric) %>%   # coordinates must be numeric
   st_as_sf(
     coords = c("lng", "lat"),
@@ -494,6 +520,8 @@ stop_koordinat = rvu %>%
          lat = b9_lat)
 
 stop_koordinat_sf =  stop_koordinat %>% 
+  mutate(lng = gsub(",", ".", gsub("\\.", "", lng)), # replace decimal "," to "."
+         lat = gsub(",", ".", gsub("\\.", "", lat))) %>% 
   mutate_at(vars(lng, lat), as.numeric) %>%   # coordinates must be numeric
   st_as_sf(
     coords = c("lng", "lat"),
@@ -622,8 +650,6 @@ if (file.exists(paste0(folder_output, "rvu.csv"))){
 } else {
   rvu_final = rvu1
 }
-
-
 
 
 

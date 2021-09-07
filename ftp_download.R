@@ -26,17 +26,18 @@ pacman::p_load(tidyverse, RCurl, writexl)
 options(scipen=999)
 
 
-### Create directories (if not already exist)
+### Create directories (if not already exist) or define specific path to indata/output
 dir.create(file.path(getwd(), "data"))
 dir.create(file.path(paste0(getwd(), "/data"), "input"))
 
 
-### Read keys, define paths 
+# Read keys, define paths 
 api_fil = read_file("Z:/api")
 server = gsub('^.*kollbar_server: \\s*|\\s*\r.*$', "", api_fil)
 userpwd = gsub('^.*kollbar_userpwd: \\s*|\\s*\r.*$', "", api_fil)
+kollbar_data = gsub('^.*kollbar_data: \\s*|\\s*\r.*$', "", api_fil)
 
-folder_input = paste0(getwd(), "/data/input/")
+folder_input = paste0(kollbar_data, "input/")
 
 
 
