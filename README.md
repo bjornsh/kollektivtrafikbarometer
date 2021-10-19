@@ -3,6 +3,8 @@ Automatisering av datahantering för Kollektivtrafikbarometern
 
 ## Syfte
 
+
+
 Kollektivtrafikbarometern (Kollbar) är en branschgemensam kvalitets-,
 attityd- och resvaneundersökning som drivs och utvecklas av Svensk
 Kollektivtrafik
@@ -74,15 +76,6 @@ urvalet till svarspersoner som är folkbokförda i en viss kommun.
 
 [R
 skript](https://github.com/bjornsh/kollektivtrafikbarometer/blob/master/filter_anonymise.R)
-
-**Filtrera bort data**  
-Skulle det behövas en omkörning av processen för en eller ett antal
-input datafiler måste respektive rader tas bort från masterfilerna
-(person, rvu, attityd) innan processen körs om för att säkerställa att
-data inte dupliceras.
-
-[R
-skript](https://github.com/bjornsh/kollektivtrafikbarometer/blob/master/remove_data.R)
 
 ## Länkar till bakgrundsdokument
 

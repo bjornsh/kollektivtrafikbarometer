@@ -58,7 +58,7 @@ dir.create(file.path(paste0(kollbar_data, "shapefile")))
 dir.create(file.path(paste0(kollbar_data, "output")))
 
 # define local paths
-folder_shapefile = paste0(kollbar_data, "shapefile/")
+folder_shapefile = paste0(kollbar_data, "shapefile")
 folder_input = paste0(kollbar_data, "input/")
 folder_output = paste0(kollbar_data, "output/")
 
@@ -111,10 +111,25 @@ tatort = st_read(paste0(folder_shapefile, "/", file_name, ".shp"),
 
 
 ### DeSO
-url_shp = paste0(folder_github, "scb/deso/Deso_inomUppsalaLan.zip")
+url_shp = paste0(folder_github, "scb/deso/deso_2018_v2.zip")
 get_shapefile(url_shp)
-deso = st_read(paste0(folder_shapefile, "/", file_name, ".shp"),
-                 options = "ENCODING=WINDOWS-1252")
+deso = st_read(paste0(folder_shapefile, "/", "DeSO_2018_v2.gpkg"))
+
+deso = filter(deso, lan == "03") # extract data for Uppsala län
+
+
+### RegSO
+# url_shp = paste0(folder_github, "scb/regso-2018_v1-1.zip")
+# get_shapefile(url_shp)
+regso = st_read(paste0(folder_shapefile,  "regso-2018_v1-1/RegSO_2018_v1.gpkg"))
+
+url_shp = paste0(folder_github, "scb/regso-2018_v1-1.zip")
+get_shapefile(url_shp)
+regso = st_read(paste0(folder_shapefile, "/regso-2018_v1-1/RegSO_2018_v1.gpkg"))
+
+regso = filter(regso, substr(kommun,1,2) == "03") # extract data for Uppsala län
+
+mapview(regso)
 
 
 ### SCB 500m ruta
@@ -135,6 +150,7 @@ ruta1000 = st_read(paste0(folder_shapefile, "/", file_name, ".shp"),
 ##################################################################################
 ### Load Kollbar data
 ##################################################################################
+
 
 ### Identifiera Kollbar filen som ska läggas till
 ## Unique kollbar data files that already exist in the "database"
@@ -239,7 +255,7 @@ dat = dat %>%
 # view number of interviews per month
 table(dat$ar, dat$manad)
 
-with(dat, table(ar, manad, u_kommun))
+# with(dat, table(ar, manad, u_kommun))
 
 
 ##################################################################################
@@ -285,29 +301,36 @@ pers = dat %>%
                 b1, 
                 h1:h6, 
                 weight, 
+                b3_r1, # "1" om första resan började hemifrån. "99" = annan adress
                 b3_r1_lng, b3_r1_lat,
-                contains("hemadress")) # extra beställning
+                contains("hemadress")) %>%  # extra beställning
+  # ta bostadskoordinater (extra beställning) om dem finns, annars ta startkoordinater av första resa
+  mutate(bostad_lng = ifelse(!is.na(lng_hemadress) &
+                               lng_hemadress != "0" &
+                               !grepl("sakna",tolower(lng_hemadress)), lng_hemadress, 
+                             ifelse((is.na(lng_hemadress) |
+                                       lng_hemadress == "0" |
+                                       grepl("sakna",tolower(lng_hemadress))) &
+                                      !is.na(b3_r1_lng) & 
+                                      b3_r1 == "1", b3_r1_lng, NA)),
+         bostad_lat = ifelse(!is.na(lat_hemadress) & 
+                               lat_hemadress != "0" &
+                               !grepl("sakna",tolower(lat_hemadress)), lat_hemadress, 
+                             ifelse((is.na(lat_hemadress) |
+                                       lat_hemadress == "0" |
+                                       grepl("sakna",tolower(lat_hemadress))) &
+                                      !is.na(b3_r1_lat) & 
+                                      b3_r1 == "1", b3_r1_lat, NA)))
 
-
-table(!grepl("sakna",tolower(pers$lng_hemadress)))
 
 
 # Skapa SF objekt 
 pers_sf = pers %>%
-  # ta bostadskoordinater (extra beställning) om dem finns, annars ta startkoordinater av första resa
-  mutate(bostad_lng = ifelse(!is.na(lng_hemadress) & 
-                               lng_hemadress != "0" &
-                               !grepl("sakna",tolower(lng_hemadress))
-                             , lng_hemadress, b3_r1_lng),
-         bostad_lat = ifelse(!is.na(lat_hemadress) & 
-                               lat_hemadress != "0" &
-                               !grepl("sakna",tolower(lat_hemadress)), 
-                             lat_hemadress, b3_r1_lat)) %>% 
   # select variables used in geodata manipulation
   dplyr::select(respondentid, bostad_lng, bostad_lat) %>% 
   filter(!is.na(bostad_lng), !is.na(bostad_lat)) %>% # remove rows with missing data
-  mutate(bostad_lng = gsub(",", ".", gsub("\\.", "", bostad_lng)), # replace decimal "," to "."
-         bostad_lat = gsub(",", ".", gsub("\\.", "", bostad_lat))) %>% 
+  mutate(bostad_lng = str_replace(bostad_lng, ",", "."), # replace decimal "," with "."
+         bostad_lat = str_replace(bostad_lat, ",", ".")) %>% 
   mutate_at(vars(bostad_lng, bostad_lat), as.numeric) %>%   # coordinates must be numeric
   # skapa SF object
   st_as_sf(
@@ -319,23 +342,22 @@ pers_sf = pers %>%
   ) %>% 
   st_transform(3006) # convert to SWEREF99 for intersect with shapefiles
 
-
 # View bostadskoordinater
 mapview(pers_sf)
 
 
-
 # intersect coordinates with admin boundaries
-bostad_meta <- pers_sf %>% 
+bostad_meta_sf <- pers_sf %>% 
   st_join(., kommun) %>% 
   st_join(., tatort) %>% 
   st_join(., deso) %>% 
+  st_join(., regso) %>%
   st_join(., ruta500) %>% 
   st_join(., ruta1000)
 
 
 # rename columns
-bostad_meta = bostad_meta %>% 
+bostad_meta = bostad_meta_sf %>% 
   as.data.frame() %>% 
   dplyr::select(respondentid,
                 kommun_namn = "KOMMUNNAMN", 
@@ -345,11 +367,28 @@ bostad_meta = bostad_meta %>%
                 tatort = KATEGORI.y,
                 tatort_namn = NAMN1,
                 tatort_kod = TATNR,
-                deso = Deso,
+                deso_kod = deso,
+                regso_kod = regsokod,
+                regso_namn = regso,
                 rutid_500 = Rut_id.x,
                 rutid_1000 = Rut_id.y) %>%
+  # Create short RegSO name, ie everything before first "-"
+  mutate(regso_namn_kort = str_split(regso_namn, "-", simplify = TRUE)[,1]) %>% 
   # add prefix "bostad_"
   rename_at(vars(!matches("respondentid")), ~ paste0("bostad_", .))
+
+
+######################
+# Kvalitetscheck #
+
+# kolla: antal svarspersoner med bostadskoordinater utanför länet
+nrow(filter(bostad_meta, is.na(bostad_deso_kod)))
+
+# kolla: andel svarspersoner med bostadskoordinater utanför länet
+paste0(round(100 * (nrow(filter(bostad_meta, is.na(bostad_deso_kod))) / 
+  nrow(bostad_meta)), 1), "%")
+
+######################
 
 
 # join bostad metadata to pers file
@@ -391,9 +430,9 @@ meta = dat %>% dplyr::select(respondentid,
                              ar, ar.manad, manad.text, kon, alder,weight)
 
 
-resa1= dat %>% # lat kommer innan lng, alla andra resor kommer lat efter lng
+resa1 = dat %>% # lat kommer innan lng, alla andra resor kommer lat efter lng
   dplyr::select(respondentid, avstand_1, contains("r1")) %>% 
-  dplyr::select(respondentid, avstand_1, matches("lat|lng|b2|b5|b6|b7|b8|b11")) %>%
+  dplyr::select(respondentid, avstand_1, matches("b3_r1|lat|lng|b2|b5|b6|b7|b8|b11")) %>% 
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa1")
 
@@ -404,9 +443,9 @@ kolnamn_resa1 = names(resa1) %>%
 
 
 
-resa2= dat %>% 
+resa2 = dat %>% 
   dplyr::select(respondentid, avstand_2, contains("r2")) %>% 
-  dplyr::select(respondentid, avstand_2, matches("lat|lng|b2|b5|b6|b7|b8|b11")) %>%
+  dplyr::select(respondentid, avstand_2, matches("b3_r2|lat|lng|b2|b5|b6|b7|b8|b11")) %>%
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa2")
 
@@ -419,7 +458,7 @@ kolnamn_resa2 = names(resa2) %>%
 
 resa3= dat %>% 
   dplyr::select(respondentid, avstand_3, contains("r3")) %>% 
-  dplyr::select(respondentid, avstand_3, matches("lat|lng|b2|b5|b6|b7|b8|b11")) %>%
+  dplyr::select(respondentid, avstand_3, matches("b3_r3|lat|lng|b2|b5|b6|b7|b8|b11")) %>%
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa3")
 
@@ -432,7 +471,7 @@ kolnamn_resa3 = names(resa3) %>%
 
 resa4= dat %>% 
   dplyr::select(respondentid, avstand_4, contains("r4")) %>% 
-  dplyr::select(respondentid, avstand_4, matches("lat|lng|b2|b5|b6|b7|b8|b11")) %>%
+  dplyr::select(respondentid, avstand_4, matches("b3_r4|lat|lng|b2|b5|b6|b7|b8|b11")) %>%
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa4")
 
@@ -445,7 +484,7 @@ kolnamn_resa4 = names(resa4) %>%
 
 resa5 = dat %>% 
   dplyr::select(respondentid, avstand_5, contains("r5")) %>% 
-  dplyr::select(respondentid, avstand_5, matches("lat|lng|b2|b5|b6|b7|b8|b11")) %>%
+  dplyr::select(respondentid, avstand_5, matches("b3_r5|lat|lng|b2|b5|b6|b7|b8|b11")) %>%
   dplyr::select(-contains("open")) %>%
   mutate(resa_nr = "resa5")
 
@@ -475,8 +514,8 @@ start_koordinat = rvu %>%
          lat = b3_lat)
 
 start_koordinat_sf =  start_koordinat %>%
-  mutate(lng = gsub(",", ".", gsub("\\.", "", lng)), # replace decimal "," to "."
-         lat = gsub(",", ".", gsub("\\.", "", lat))) %>% 
+  mutate(lng = str_replace(lng, ",", "."), # replace decimal "," with "."
+         lat = str_replace(lat, ",", ".")) %>% 
   mutate_at(vars(lng, lat), as.numeric) %>%   # coordinates must be numeric
   st_as_sf(
     coords = c("lng", "lat"),
@@ -485,28 +524,33 @@ start_koordinat_sf =  start_koordinat %>%
     stringsAsFactors = FALSE,
     remove = TRUE
   ) %>% 
-  st_transform(3006)
+  st_transform(3006) # convert to SWEREF99 TM
 
 
 start_points_join <- start_koordinat_sf %>% 
   st_join(., kommun) %>% 
   st_join(., tatort) %>% 
   st_join(., deso) %>% 
+  st_join(., regso) %>%
   st_join(., ruta500) %>% 
   st_join(., ruta1000)
 
 start_meta = start_points_join %>% 
   as.data.frame() %>% 
-  dplyr::select(kommun_namn = "KOMMUNNAMN", 
+  dplyr::select(kommun_namn = KOMMUNNAMN, 
                 kommun_kod = KOMMUNKOD, 
                 lan_namn = LANSNAMN, 
                 lan_kod = LANSKOD.x,
                 tatort = KATEGORI.y,
                 tatort_namn = NAMN1,
                 tatort_kod = TATNR,
-                deso = Deso,
+                deso_kod = deso,
+                regso_kod = regsokod,
+                regso_namn = regso,
                 rutid_500 = Rut_id.x,
                 rutid_1000 = Rut_id.y) %>% 
+  # Create short RegSO name, ie everything before first "-"
+  mutate(regso_namn_kort = str_split(regso_namn, "-", simplify = TRUE)[,1]) %>% 
   bind_cols(., start_koordinat)
 
 colnames(start_meta) <- paste("start", colnames(start_meta), sep = "_")
@@ -520,8 +564,8 @@ stop_koordinat = rvu %>%
          lat = b9_lat)
 
 stop_koordinat_sf =  stop_koordinat %>% 
-  mutate(lng = gsub(",", ".", gsub("\\.", "", lng)), # replace decimal "," to "."
-         lat = gsub(",", ".", gsub("\\.", "", lat))) %>% 
+  mutate(lng = str_replace(lng, ",", "."), # replace decimal "," with "."
+         lat = str_replace(lat, ",", ".")) %>% 
   mutate_at(vars(lng, lat), as.numeric) %>%   # coordinates must be numeric
   st_as_sf(
     coords = c("lng", "lat"),
@@ -537,21 +581,26 @@ stop_points_join <- stop_koordinat_sf %>%
   st_join(., kommun) %>% 
   st_join(., tatort) %>% 
   st_join(., deso) %>% 
+  st_join(., regso) %>%
   st_join(., ruta500) %>% 
   st_join(., ruta1000)
 
 stop_meta = stop_points_join %>% 
   as.data.frame() %>% 
-  dplyr::select(kommun_namn = "KOMMUNNAMN", 
+  dplyr::select(kommun_namn = KOMMUNNAMN, 
                 kommun_kod = KOMMUNKOD, 
                 lan_namn = LANSNAMN, 
                 lan_kod = LANSKOD.x,
                 tatort = KATEGORI.y,
                 tatort_namn = NAMN1,
                 tatort_kod = TATNR,
-                deso = Deso,
+                deso_kod = deso,
+                regso_kod = regsokod,
+                regso_namn = regso,
                 rutid_500 = Rut_id.x,
                 rutid_1000 = Rut_id.y) %>% 
+  # Create short RegSO name, ie everything before first "-"
+  mutate(regso_namn_kort = str_split(regso_namn, "-", simplify = TRUE)[,1]) %>% 
   bind_cols(., stop_koordinat)
 
 colnames(stop_meta) <- paste("stop", colnames(stop_meta), sep = "_")
@@ -564,7 +613,7 @@ rvu = rvu %>%
 
 
 
-### add fardmedel kolumn
+### add column for fardmedel and combination journeys
 
 # if person states >1 färdmedel in Q b5, then follows Q b6 (huvudsakliga färdmedel)
 # if b6 is not NA the person has already decided on a huvud färdmedel
@@ -608,27 +657,25 @@ rvu = rvu %>%
   mutate(fardmedel.kat = ifelse(is.na(fardmedel.kat) &
                                   fardmedel == "5", "Gång", fardmedel.kat)) %>% 
   mutate(fardmedel.kat = ifelse(is.na(fardmedel.kat) &
-                                  fardmedel==7, "Annat", fardmedel.kat))
-
-
-### create columns: 
-# 1) number of färdmedel used
-# 2) are start and stop coordinates the same
-
-rvu = rvu %>% 
-  # number of färdmedel used
-  mutate_at(vars(starts_with("b5_")), as.numeric) %>% 
-  mutate(fardmedelantal = b5_1 + b5_2 + b5_3 + b5_4 + b5_5 + b5_6 + b5_7) %>% 
-  # are start and stop coordinates the same?
+                                  fardmedel==7, "Annat", fardmedel.kat)) %>% 
+  # kombinationsresor med koll och bil eller cykel
+  mutate_at(vars(starts_with("b5_")),  as.numeric) %>% 
+  mutate(antal_fardmedel = rowSums(select(., starts_with("b5_")), na.rm = TRUE)) %>%
+  mutate(koll_kombi = ifelse(b5_1 == "1" & b5_4 == "1", "koll_cykel",
+                             ifelse(b5_1 == "1" & 
+                                      (b5_2 == "1" | b5_3 == "1"), "koll_bil", NA))) %>% 
+  # are start and stop coordinates the same
   mutate(samma_koordinat = case_when(!is.na(b3_lat) & !is.na(b9_lat) &
                                        b3_lat == b9_lat &
                                        b3_lng == b9_lng ~ "ja",
                                      !is.na(b3_lat) & !is.na(b9_lat) &
                                        (b3_lat != b9_lat &
-                                       b3_lng != b9_lng) ~ "nej")) %>% 
+                                          b3_lng != b9_lng) ~ "nej")) %>% 
   # all variables as.character to facilitate append
   mutate(across(everything(), as.character))
-  
+
+
+
 
 #### data cleaning
 # all journeys get assigned a start coordinate, 
