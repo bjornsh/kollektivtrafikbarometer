@@ -1,0 +1,189 @@
+---
+title: "Kollektivtrafikbarometer - Ombord"
+author: "Region Uppsala, Trafik och samhälle"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, echo = F, message = F, warning = F}
+
+# clean start
+rm(list = ls())
+
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(scales)
+```
+
+
+```{r}
+
+# results='hide'
+
+### read data
+
+# location of datafolder
+sokvag <- "C/...../"
+
+# person file
+pers = data.table::fread(paste0(sokvag, "person.csv"), 
+                  sep = ";", 
+                  encoding = 'UTF-8') %>% 
+  mutate(respondentid = as.character(respondentid))
+
+# attityd file
+attityd = data.table::fread(paste0(sokvag, "attityd.csv"), 
+                  sep = ";", 
+                  encoding = 'UTF-8') %>% 
+  mutate(respondentid = as.character(respondentid)) %>% 
+  select(-ar, -ar.manad, -alder)
+
+
+### join person and attityd files
+dat = pers %>% 
+  left_join(., attityd, by = "respondentid")
+
+
+# filter: år 2020 & alla utom personer som bor utanför uppsala kommun och använder stadsbuss
+dat1 = dat %>% 
+  # extract relevant sample
+  filter(u_kommun=="uppsala", # folkbokförd i uppsala
+         a7a=="1") %>%  # reser mest med stadsbuss
+  # fix variables
+  mutate(weight = as.numeric(str_replace(weight, ",", ".")),
+         manad = substr(ar.manad,5,6)) %>%
+  dplyr::select(a7a, ar, manad, a1, c11, d1, d2, d3, d4, a8a, a8c, kon, h1, weight) %>% 
+  mutate(d1 = as.numeric(d1),
+         d2 = as.numeric(d2),
+         d3 = as.numeric(d3),
+         d4 = as.numeric(d4),
+         weight = as.numeric(weight))
+
+```
+
+
+
+```{r}
+
+### Create df for presentation
+
+## Indicator: Rent och snyggt i fordonen
+d1.alla = dat1 %>% 
+  filter(between(d1, 1, 5)) %>%
+  group_by(ar, manad) %>%
+  summarise(urval=n(),
+            "Andel som instämmer" = percent(sum(weight[d1==4 | d1==5]) / sum(weight))) %>%
+  rename(År = 1, Månad = manad, Urvalsstorlek = urval)
+
+
+## Indicator: Förarna och ombordpersonalen har ett trevligt bemötande
+d2.alla = dat1 %>% 
+  filter(between(d2, 1, 5)) %>%
+  group_by(ar, manad) %>%
+  summarise(urval=n(),
+            "Andel som instämmer" = percent(sum(weight[d2==4 | d2==5]) / sum(weight))) %>%
+  rename(År = 1, Månad = manad, Urvalsstorlek = urval)
+
+
+## Indicator: Det är bekvämt ombord
+d3.alla = dat1 %>% 
+  filter(between(d3, 1, 5)) %>%
+  group_by(ar, manad) %>%
+  summarise(urval=n(),
+            "Andel som instämmer" = percent(sum(weight[d3==4 | d3==5]) / sum(weight))) %>%
+  rename(År = 1, Månad = manad, Urvalsstorlek = urval)
+
+
+## Indicator: Jag får den information jag behöver ombord
+d4.alla = dat1 %>% 
+  filter(between(d4, 1, 5)) %>%
+  group_by(ar, manad) %>%
+  summarise(urval=n(),
+            "Andel som instämmer" = percent(sum(weight[d4==4 | d4==5]) / sum(weight))) %>%
+  rename(År = 1, Månad = manad, Urvalsstorlek = urval)
+
+
+## Indicator: Det känns tryggt att resa med UL
+c11.alla = dat1 %>% 
+  filter(between(c11, 1, 5)) %>%
+  group_by(ar, manad) %>%
+  summarise(urval=n(),
+            "Andel som instämmer" = percent(sum(weight[c11==4 | c11==5]) / sum(weight))) %>%
+  rename(År = 1, Månad = manad, Urvalsstorlek = urval)
+
+```
+
+&nbsp;
+
+I redovisningen av svar till Kollektivtrafikbarometers ombordspaket ingår alla intervjupersoner som är folkbokförda i Uppsala kommun, reser regelbundet med UL  och reser mest med stadsbuss. Redovisningen fokuserar på de senaste sex månaderna.
+
+&nbsp;
+
+### Det är rent och snyggt i fordonen  
+
+"Det är rent och snyggt i fordonen" är en ljumfråga som ställs till var tredje person. En mindre urvalsstorlek kan vara en anledning till en sporadisk resultatvariation över tid.  
+
+```{r}
+
+# include=TRUE
+
+d1 <- d1.alla %>%
+  tail(., n = 6) %>% 
+  kable(., row.names = FALSE, "html", align="c")
+
+kable_styling(d1, bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
+
+
+&nbsp;
+
+### Förarna och ombordpersonalen har ett trevligt bemötande
+```{r, echo=FALSE, message=F, warning=F, include=TRUE}
+d2 <- d2.alla %>%
+  tail(., n = 6) %>% 
+  kable(., row.names = FALSE, "html", align="c")
+
+kable_styling(d2, bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
+
+&nbsp;
+
+
+### Det är bekvämt ombord
+```{r, echo=FALSE, message=F, warning=F, include=TRUE}
+d3 <- d3.alla %>%
+  tail(., n = 6) %>% 
+  kable(., row.names = FALSE, "html", align="c")
+
+kable_styling(d3, bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
+
+
+&nbsp;
+
+### Jag får den information jag behöver ombord
+```{r, echo=FALSE, message=F, warning=F, include=TRUE}
+d4 <- d4.alla %>%
+  tail(., n = 6) %>% 
+  kable(., row.names = FALSE, "html", align="c")
+
+kable_styling(d4, bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
+
+&nbsp;
+
+
+### Det känns tryggt att resa med UL
+```{r, echo=FALSE, message=F, warning=F, include=TRUE}
+c11 <- c11.alla %>%
+  tail(., n = 6) %>% 
+  kable(., row.names = FALSE, "html", align="c")
+
+kable_styling(c11, bootstrap_options = "striped", full_width = FALSE, position = "left")
+```
+
+
